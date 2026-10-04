@@ -1,0 +1,30 @@
+{
+  "name": "maane-oota-website",
+  "version": "1.0.0",
+  "private": true,
+  "description": "MAANE OOTA showcase website: bulk food orders by custom quote, Bengaluru",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/UtpalRaJ-07/MAANEOOTA.git"
+  },
+  "scripts": {
+    "dev": "next dev -p 3001",
+    "build": "next build",
+    "typecheck": "tsc --noEmit",
+    "validate": "tsx scripts/validate-content.ts",
+    "test:content": "tsx scripts/validate-content.test.ts",
+    "prebuild": "tsx scripts/validate-content.ts"
+  },
+  "dependencies": {
+    "next": "14.2.35",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "20.19.43",
+    "@types/react": "18.3.31",
+    "@types/react-dom": "18.3.7",
+    "tsx": "^4.19.1",
+    "typescript": "5.9.3"
+  }
+}

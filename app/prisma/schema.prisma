@@ -1,0 +1,517 @@
+// MAANE OOTA data model (sandbox build).
+// NOTE: SQLite is used for a runnable sandbox. The model maps to the
+// PostgreSQL + PostGIS blueprint in MAANE-OOTA-MASTER-PLAN.md section 19.
+// Money is ALWAYS integer paise. Geometry is stored as JSON here; in
+// production these become PostGIS geometry columns.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- Identity & roles ----------
+model User {
+  id           String   @id @default(cuid())
+  phone        String   @unique
+  phoneVerified Boolean @default(false)
+  name         String?
+  email        String?
+  role         String   @default("customer") // customer | partner | admin | dispatch | finance | content
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  addresses    Address[]
+  orders       Order[]
+  carts        Cart[]
+  kitchens     Kitchen[]
+  bulkRequests BulkRequest[]
+  packPurchases PackPurchase[]
+  reviews      Review[]
+  auditLogs    AuditLog[]
+}
+
+model Address {
+  id          String  @id @default(cuid())
+  userId      String
+  user        User    @relation(fields: [userId], references: [id])
+  label       String?
+  line1       String
+  line2       String?
+  locationId  String?
+  location    Location? @relation(fields: [locationId], references: [id])
+  pincode     String?
+  lat         Float?
+  lng         Float?
+  instructions String?
+  createdAt   DateTime @default(now())
+}
+
+// ---------- Geography ----------
+model City {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  timezone  String   @default("Asia/Kolkata")
+  locations Location[]
+}
+
+model Location {
+  id           String   @id @default(cuid())
+  cityId       String
+  city         City     @relation(fields: [cityId], references: [id])
+  name         String
+  slug         String
+  type         String   @default("area") // area | sublocality | landmark-catchment
+  parentId     String?
+  parent       Location? @relation("LocationParent", fields: [parentId], references: [id])
+  children     Location[] @relation("LocationParent")
+  acquisitionGroup String // north | south | east | west | central | outer
+  // Provenance: unknown values remain null (never fabricated).
+  lat          Float?
+  lng          Float?
+  boundary     String?   // GeoJSON polygon (sandbox); PostGIS geometry in prod
+  geoSource    String?
+  geoVerifiedAt DateTime?
+  confidence   String?
+  createdAt    DateTime @default(now())
+
+  aliases      LocationAlias[]
+  postalCodes  LocationPostalCode[]
+  addresses    Address[]
+  seoPage      SeoPage?
+  kitchenCoverage KitchenCoverage[]
+
+  @@unique([cityId, slug])
+}
+
+model LocationAlias {
+  id         String   @id @default(cuid())
+  locationId String
+  location   Location @relation(fields: [locationId], references: [id])
+  alias      String
+}
+
+model PostalCode {
+  id    String @id @default(cuid())
+  code  String @unique
+  links LocationPostalCode[]
+}
+
+model LocationPostalCode {
+  id           String     @id @default(cuid())
+  locationId   String
+  location     Location   @relation(fields: [locationId], references: [id])
+  postalCodeId String
+  postalCode   PostalCode @relation(fields: [postalCodeId], references: [id])
+  @@unique([locationId, postalCodeId])
+}
+
+// ---------- Kitchens / supply ----------
+model Kitchen {
+  id            String  @id @default(cuid())
+  ownerId       String?
+  owner         User?   @relation(fields: [ownerId], references: [id])
+  name          String
+  slug          String  @unique
+  kitchenType   String  // home-cook | home-kitchen | regional-specialist | documented-small-kitchen | bulk-supplier
+  isHomemade    Boolean @default(true)
+  state         String  @default("draft") // draft | in_review | approved | suspended
+  verificationScope String?
+  verifiedAt    DateTime?
+  publicSummary String?
+  photoUrl      String?
+  // sandbox flag — never a real production kitchen
+  isFixture     Boolean @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  menuItems     MenuItem[]
+  slots         Slot[]
+  coverage      KitchenCoverage[]
+  orders        Order[]
+  reviews       Review[]
+}
+
+model KitchenCoverage {
+  id         String   @id @default(cuid())
+  kitchenId  String
+  kitchen    Kitchen  @relation(fields: [kitchenId], references: [id])
+  locationId String
+  location   Location @relation(fields: [locationId], references: [id])
+  deliveryMode String @default("partner") // partner | provider
+  deliveryFeePaise Int @default(2500)
+  @@unique([kitchenId, locationId])
+}
+
+model MenuItem {
+  id          String  @id @default(cuid())
+  kitchenId   String
+  kitchen     Kitchen @relation(fields: [kitchenId], references: [id])
+  name        String
+  description String?
+  pricePaise  Int
+  portion     String?
+  dietTags    String  @default("") // csv: veg,non-veg,jain,...
+  mealType    String  @default("lunch") // breakfast | lunch | dinner
+  cuisine     String? // karnataka | south-indian | north-indian
+  photoUrl    String?
+  isListed    Boolean @default(true)
+  createdAt   DateTime @default(now())
+
+  orderItems  OrderItem[]
+  availability ItemAvailability[]
+}
+
+model Slot {
+  id          String  @id @default(cuid())
+  kitchenId   String
+  kitchen     Kitchen @relation(fields: [kitchenId], references: [id])
+  serviceDate String  // YYYY-MM-DD (Asia/Kolkata)
+  mealType    String  // breakfast | lunch | dinner
+  cutoff      DateTime
+  capacity    Int
+  committed   Int     @default(0)
+  version     Int     @default(0)
+  createdAt   DateTime @default(now())
+
+  reservations Reservation[]
+  orders       Order[]
+  itemAvailability ItemAvailability[]
+  @@unique([kitchenId, serviceDate, mealType])
+}
+
+model ItemAvailability {
+  id         String @id @default(cuid())
+  slotId     String
+  slot       Slot   @relation(fields: [slotId], references: [id])
+  menuItemId String
+  menuItem   MenuItem @relation(fields: [menuItemId], references: [id])
+  capacity   Int
+  committed  Int    @default(0)
+  @@unique([slotId, menuItemId])
+}
+
+model Reservation {
+  id         String   @id @default(cuid())
+  slotId     String
+  slot       Slot     @relation(fields: [slotId], references: [id])
+  cartId     String?
+  units      Int
+  state      String   @default("held") // held | committed | released
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+}
+
+// ---------- Cart / checkout ----------
+model Cart {
+  id         String   @id @default(cuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id])
+  kitchenId  String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  items      CartItem[]
+}
+
+model CartItem {
+  id         String @id @default(cuid())
+  cartId     String
+  cart       Cart   @relation(fields: [cartId], references: [id])
+  menuItemId String
+  qty        Int
+  pricePaise Int    // snapshot
+}
+
+// ---------- Orders ----------
+model Order {
+  id             String   @id @default(cuid())
+  publicId       String   @unique
+  userId         String
+  user           User     @relation(fields: [userId], references: [id])
+  kitchenId      String
+  kitchen        Kitchen  @relation(fields: [kitchenId], references: [id])
+  slotId         String
+  slot           Slot     @relation(fields: [slotId], references: [id])
+  idempotencyKey String   @unique
+  addressSnapshot String
+  foodPaise      Int
+  packagingPaise Int      @default(0)
+  deliveryPaise  Int      @default(0)
+  platformFeePaise Int    @default(0)
+  discountPaise  Int      @default(0)
+  taxPaise       Int      @default(0)
+  totalPaise     Int
+  offerId        String?
+  paymentState   String   @default("initiated") // initiated|pending|captured|failed|refunded|partially_refunded
+  fulfilmentState String  @default("awaiting_payment") // see plan section 21
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  items          OrderItem[]
+  statusEvents   OrderStatusEvent[]
+  payments       Payment[]
+  refunds        Refund[]
+  reviews        Review[]
+  ledgerEntries  LedgerEntry[]
+  redemptions    Redemption[]
+}
+
+model OrderItem {
+  id         String @id @default(cuid())
+  orderId    String
+  order      Order  @relation(fields: [orderId], references: [id])
+  menuItemId String
+  menuItem   MenuItem @relation(fields: [menuItemId], references: [id])
+  nameSnapshot String
+  qty        Int
+  pricePaise Int
+}
+
+model OrderStatusEvent {
+  id        String   @id @default(cuid())
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id])
+  kind      String   // payment | fulfilment
+  fromState String?
+  toState   String
+  actor     String?
+  reason    String?
+  createdAt DateTime @default(now())
+}
+
+// ---------- Payments ----------
+model Payment {
+  id            String   @id @default(cuid())
+  orderId       String
+  order         Order    @relation(fields: [orderId], references: [id])
+  provider      String   @default("sandbox")
+  providerRef   String   @unique
+  amountPaise   Int
+  status        String   @default("pending") // pending|captured|failed
+  createdAt     DateTime @default(now())
+  events        PaymentEvent[]
+}
+
+model PaymentEvent {
+  id         String  @id @default(cuid())
+  paymentId  String
+  payment    Payment @relation(fields: [paymentId], references: [id])
+  providerEventId String @unique // dedupe webhook replays
+  type       String
+  payload    String
+  createdAt  DateTime @default(now())
+}
+
+model Refund {
+  id          String @id @default(cuid())
+  orderId     String
+  order       Order  @relation(fields: [orderId], references: [id])
+  amountPaise Int
+  reason      String
+  approver    String?
+  status      String @default("recorded") // recorded|processed|failed
+  createdAt   DateTime @default(now())
+}
+
+// ---------- Promotions ----------
+model Promotion {
+  id             String @id @default(cuid())
+  code           String @unique
+  kind           String // trial | meal_pack | group | kitchen | referral | bulk_tier
+  amountPaise    Int?
+  percentage     Int?
+  maxSavingPaise Int?
+  minSubtotalPaise Int @default(0)
+  eligibleAreas  String @default("") // csv location slugs, empty = all
+  startAt        DateTime
+  endAt          DateTime
+  totalBudgetPaise Int
+  usedBudgetPaise  Int @default(0)
+  heldBudgetPaise  Int @default(0)
+  perUserLimit   Int  @default(1)
+  stackable      Boolean @default(false)
+  termsVersion   String @default("v1")
+  active         Boolean @default(true)
+  redemptions    Redemption[]
+}
+
+model Redemption {
+  id          String @id @default(cuid())
+  promotionId String
+  promotion   Promotion @relation(fields: [promotionId], references: [id])
+  orderId     String
+  order       Order  @relation(fields: [orderId], references: [id])
+  userId      String
+  amountPaise Int
+  state       String @default("reserved") // reserved | redeemed | released
+  createdAt   DateTime @default(now())
+  @@unique([promotionId, orderId])
+}
+
+// ---------- Bulk ----------
+model BulkRequest {
+  id          String @id @default(cuid())
+  publicRef   String @unique
+  userId      String?
+  user        User?  @relation(fields: [userId], references: [id])
+  headcount   Int
+  serviceDate String
+  locationSlug String?
+  mealType    String
+  cuisine     String?
+  vegSplit    String?
+  budgetPerHeadPaise Int?
+  packaging   String?
+  contactPhone String
+  notes       String?
+  state       String @default("received") // received | quoted | accepted | fulfilled | cancelled
+  createdAt   DateTime @default(now())
+  quotes      QuoteVersion[]
+}
+
+model QuoteVersion {
+  id            String @id @default(cuid())
+  bulkRequestId String
+  bulkRequest   BulkRequest @relation(fields: [bulkRequestId], references: [id])
+  version       Int
+  totalPaise    Int
+  perHeadPaise  Int
+  menuSummary   String
+  acceptanceExpiry DateTime
+  state         String @default("sent") // sent | accepted | superseded | expired
+  acceptedAt    DateTime?
+  createdAt     DateTime @default(now())
+  @@unique([bulkRequestId, version])
+}
+
+// ---------- Meal packs ----------
+model MealPack {
+  id          String @id @default(cuid())
+  kitchenId   String
+  name        String
+  mealCount   Int
+  pricePaise  Int
+  mealType    String
+  active      Boolean @default(true)
+  purchases   PackPurchase[]
+}
+
+model PackPurchase {
+  id          String @id @default(cuid())
+  mealPackId  String
+  mealPack    MealPack @relation(fields: [mealPackId], references: [id])
+  userId      String
+  user        User   @relation(fields: [userId], references: [id])
+  startDate   String
+  entitlement Int    // total meals granted
+  consumed    Int    @default(0)
+  skipped     Int    @default(0)
+  credited    Int    @default(0)
+  state       String @default("active")
+  createdAt   DateTime @default(now())
+  deliveries  PackDelivery[]
+}
+
+model PackDelivery {
+  id           String @id @default(cuid())
+  packPurchaseId String
+  packPurchase PackPurchase @relation(fields: [packPurchaseId], references: [id])
+  serviceDate  String
+  state        String @default("scheduled") // scheduled | delivered | skipped | credited
+  @@unique([packPurchaseId, serviceDate])
+}
+
+// ---------- Ledger / settlement ----------
+model LedgerEntry {
+  id          String @id @default(cuid())
+  orderId     String?
+  order       Order? @relation(fields: [orderId], references: [id])
+  account     String // platform_revenue | partner_payable | delivery_cost | refund | gateway_fee
+  amountPaise Int    // signed
+  memo        String?
+  createdAt   DateTime @default(now())
+}
+
+// ---------- Reviews / support ----------
+model Review {
+  id        String @id @default(cuid())
+  orderId   String
+  order     Order  @relation(fields: [orderId], references: [id])
+  kitchenId String
+  kitchen   Kitchen @relation(fields: [kitchenId], references: [id])
+  userId    String
+  user      User   @relation(fields: [userId], references: [id])
+  rating    Int
+  text      String?
+  state     String @default("published") // published | hidden
+  createdAt DateTime @default(now())
+  @@unique([orderId])
+}
+
+// ---------- SEO / content ----------
+model SeoPage {
+  id            String @id @default(cuid())
+  route         String @unique
+  locationId    String? @unique
+  location      Location? @relation(fields: [locationId], references: [id])
+  intent        String  @default("area-home-food")
+  title         String
+  h1            String
+  description   String?
+  state         String  @default("draft") // draft | in_review | published | noindex
+  sitemapIncluded Boolean @default(false)
+  reviewer      String?
+  reviewedAt    DateTime?
+  lastMaterialUpdate DateTime?
+  nextReviewAt  DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  checks        PublicationCheck[]
+}
+
+model PublicationCheck {
+  id         String  @id @default(cuid())
+  seoPageId  String
+  seoPage    SeoPage @relation(fields: [seoPageId], references: [id])
+  rule       String
+  passed     Boolean
+  detail     String?
+  checkedAt  DateTime @default(now())
+}
+
+model Redirect {
+  id   String @id @default(cuid())
+  from String @unique
+  to   String
+  code Int    @default(301)
+}
+
+model Article {
+  id        String @id @default(cuid())
+  slug      String @unique
+  title     String
+  body      String
+  state     String @default("draft")
+  createdAt DateTime @default(now())
+}
+
+// ---------- Ops ----------
+model AuditLog {
+  id        String @id @default(cuid())
+  actorId   String?
+  actor     User?  @relation(fields: [actorId], references: [id])
+  action    String
+  target    String?
+  reason    String?
+  createdAt DateTime @default(now())
+}
+
+model ProcessedEvent {
+  id        String @id @default(cuid())
+  eventId   String @unique
+  createdAt DateTime @default(now())
+}

@@ -1,0 +1,551 @@
+/* ==========================================================================
+   MAANE OOTA — opening brand film
+   --------------------------------------------------------------------------
+   One timeline. Every animation lasts var(--mo-d) and places its beats with
+   keyframe percentages (beat map in config.ts), so the controller can rescale
+   the film, start it part-way (returning visitors), pause it (hidden tab) or
+   freeze it (?introAt=ms) with a single variable.
+
+   Only transform and opacity are animated, plus a short depth-of-field blur on
+   desktop, so the film runs on the compositor thread and stays smooth while
+   the page hydrates underneath it.
+   ========================================================================== */
+
+.mo-intro {
+  --mo-d: 4600ms;
+  --mo-offset: 0ms;
+  --mo-bg: #0c0806;
+  /* Sized so the whole lockup (mark + gap + wordmark ≈ 5.9em) never reaches the edges. */
+  --mo-size: clamp(44px, min(14vw, 17vh), 150px);
+  --mo-depth: .0172em;
+  --mo-fx: 0px;
+  --mo-fy: 0px;
+  --mo-fs: 1;
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  overflow: hidden;
+  contain: strict;
+  color: #fff7ed;
+  font-family: var(--font, -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif);
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  cursor: default;
+  animation: mo-life var(--mo-d) linear both;
+}
+.mo-intro:is([data-state="play"], [data-state="paused"], [data-state="skip"]) { display: block; }
+.mo-intro i { font-style: normal; }
+.mo-g::before, .mo-kn::before, .mo-tag i::after { content: attr(data-t); }
+
+/* ---------- World ---------- */
+
+/* The darkness lives here, not on .mo-intro: when the scene dissolves at the end it
+   uncovers the real website underneath, and the wordmark stays fully opaque while it
+   lands on the header. The opening frame is still a single solid fill. */
+.mo-scene { position: absolute; inset: 0; background: var(--mo-bg); animation: mo-scene-out var(--mo-d) linear both; }
+.mo-camera {
+  position: absolute;
+  inset: -7%;
+  transform-origin: 50% 56%;
+  animation: mo-cam var(--mo-d) linear both;
+}
+.mo-light {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(46% 30% at 50% 80%, rgba(194, 65, 12, .32), rgba(154, 52, 18, .13) 55%, rgba(124, 45, 18, 0) 100%),
+    radial-gradient(30% 28% at 50% 46%, rgba(251, 146, 60, .15), rgba(251, 146, 60, 0) 100%),
+    radial-gradient(120% 86% at 50% 52%, #1b110b 0%, #0c0806 56%, #030201 100%);
+  opacity: 0;
+  animation: mo-light var(--mo-d) linear both;
+}
+.mo-atmos { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; }
+.mo-intro[data-gl="on"] .mo-atmos { opacity: 1; animation: mo-fade-in .7s ease-out both; }
+
+.mo-wisps { position: absolute; inset: 0; transition: opacity .8s ease; }
+.mo-intro[data-gl="on"] .mo-wisps { opacity: 0; }
+.mo-wisps i {
+  position: absolute;
+  left: 50%;
+  bottom: 6%;
+  width: 26vmin;
+  height: 62vmin;
+  margin-left: -13vmin;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(255, 226, 196, .15), rgba(255, 214, 180, .055) 55%, rgba(255, 214, 180, 0));
+  animation: mo-wisp-a var(--mo-d) linear both;
+}
+.mo-wisps i:nth-child(2) { width: 19vmin; margin-left: -19vmin; animation-name: mo-wisp-b; }
+.mo-wisps i:nth-child(3) { width: 17vmin; margin-left: 3vmin; animation-name: mo-wisp-c; }
+
+.mo-beam {
+  position: absolute;
+  top: -40%;
+  bottom: -40%;
+  left: 50%;
+  width: 44vw;
+  margin-left: -22vw;
+  background: linear-gradient(90deg, rgba(255, 190, 130, 0), rgba(255, 196, 140, .022) 28%, rgba(255, 214, 172, .055) 50%, rgba(255, 196, 140, .022) 72%, rgba(255, 190, 130, 0));
+  opacity: 0;
+  animation: mo-beam var(--mo-d) linear both;
+}
+
+/* Exit light: rises from the meal below the frame (no hard edge), then the frame settles on warm white. */
+.mo-flood {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(70% 62% at 50% 112%, rgba(255, 251, 245, 1) 0%, rgba(255, 247, 238, .9) 26%, rgba(255, 239, 224, .56) 52%, rgba(255, 230, 206, .2) 76%, rgba(255, 224, 196, 0) 100%);
+  transform-origin: 50% 100%;
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: mo-flood var(--mo-d) linear both;
+}
+.mo-dawn { position: absolute; inset: 0; background: #fffaf3; opacity: 0; animation: mo-dawn var(--mo-d) linear both; }
+
+/* Film grain: dithers the dark gradients and gives the frame a photographic texture. */
+.mo-grain {
+  position: absolute;
+  inset: -12%;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n' x='0' y='0'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 .93 0 0 0 0 .86 0 0 0 1.5 -.5'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E") 0 0 / 200px 200px;
+  opacity: 0;
+  pointer-events: none;
+  animation: mo-grain-out var(--mo-d) linear both, mo-grain .8s steps(1, end) infinite;
+}
+
+/* ---------- Logo ---------- */
+
+.mo-logo {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0 22px 3vh;
+  text-align: center;
+  pointer-events: none;
+}
+/* Typography identical to the header logo (.brand), scaled up. */
+.mo-slot {
+  position: relative;
+  font-size: var(--mo-size);
+  line-height: 1;
+  font-weight: 700;
+  letter-spacing: -.03em;
+  white-space: nowrap;
+}
+.mo-fly { animation: mo-fly-x var(--mo-d) linear both; }
+.mo-fly-y { position: relative; animation: mo-fly-y var(--mo-d) linear both; }
+.mo-lens { position: relative; animation: mo-lens var(--mo-d) linear both; }
+.mo-stage { perspective: 1100px; perspective-origin: 50% 40%; }
+.mo-dolly { transform-style: preserve-3d; animation: mo-dolly var(--mo-d) linear both; }
+/* Mark and wordmark turn together, so the logo behaves as one object. */
+.mo-turn {
+  transform-style: preserve-3d;
+  transform: rotateX(13deg);
+  animation: mo-turn var(--mo-d) linear both;
+}
+/* Same arrangement and proportions as .brand in the header, so the landing is exact. */
+.mo-lock { display: flex; align-items: center; gap: .3em; transform-style: preserve-3d; }
+.mo-word { position: relative; transform-style: preserve-3d; }
+.mo-word > i { display: block; }
+
+/* ---------- Mark ---------- */
+
+.mo-mark {
+  position: relative;
+  flex: none;
+  /* Keep MARK_SCALE (1.2) and the 40/34 viewBox in sync with BrandLogo.tsx. */
+  height: 1.2em;
+  width: calc(1.2em * 40 / 34);
+  animation: mo-mark var(--mo-d) linear both;
+}
+.mo-mark .mark { position: absolute; inset: 0; height: 100%; width: 100%; overflow: visible; }
+.mo-mark-lit { color: #f0a068; animation: mo-mark-lit var(--mo-d) linear both; }
+.mo-mark-ink { color: var(--accent, #c2410c); opacity: 0; animation: mo-mark-ink var(--mo-d) linear both; }
+/* The parts assemble: the roof settles down, the vessel rises, then the steam. */
+.mo-mark .mark > path { transform-box: fill-box; }
+.mo-mark .mark-roof { transform-origin: 50% 100%; animation: mo-mark-roof var(--mo-d) linear both; }
+.mo-mark :is(.mark-rim, .mark-bowl) { transform-origin: 50% 0; animation: mo-mark-bowl var(--mo-d) linear both; }
+.mo-mark .mark-bowl { animation-name: mo-mark-bowl-2; }
+.mo-mark :is(.mark-steam-l, .mark-steam-r) { transform-origin: 50% 100%; animation: mo-mark-steam var(--mo-d) linear both; }
+.mo-mark .mark-steam-r { animation-name: mo-mark-steam-2; }
+.mo-slice, .mo-rim, .mo-ink, .mo-sheen { position: absolute; inset: 0; }
+/* Lamp catching the top edges of the letters. */
+.mo-rim {
+  color: rgba(255, 222, 186, .5);
+  transform: translate3d(0, -.016em, -.35px);
+  animation: mo-slice var(--mo-d) linear both;
+}
+.mo-slice {
+  transform: translateZ(calc(var(--i) * var(--mo-depth) * -1));
+  animation: mo-slice var(--mo-d) linear both;
+}
+/* Glazed ivory face, lit from above by the lamp. */
+.mo-face {
+  position: relative;
+  background: linear-gradient(180deg, #fffaf3 0%, #fbeee0 38%, #f2dac0 72%, #e3bf9b 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: mo-face var(--mo-d) linear both;
+}
+/* The header logo colour, faded in during the flight. */
+.mo-ink {
+  color: #1d1d1f;
+  transform: translateZ(.3px);
+  opacity: 0;
+  animation: mo-ink var(--mo-d) linear both;
+}
+/* Light passing across the glaze. */
+.mo-sheen {
+  transform: translateZ(.6px);
+  background: linear-gradient(104deg, rgba(255, 255, 255, 0) 40%, rgba(255, 255, 255, .9) 50%, rgba(255, 255, 255, 0) 60%) 100% 0 / 300% 100% no-repeat;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  opacity: 0;
+  animation: mo-sheen var(--mo-d) linear both;
+}
+/* Warm backlight behind the letters and a soft shadow beneath them. Kept low: any
+   brighter and the bloom swallows the letter edges, and the extrusion stops reading. */
+.mo-halo {
+  position: absolute;
+  inset: -70% -26%;
+  background: radial-gradient(closest-side, rgba(253, 170, 100, .17), rgba(194, 65, 12, .07) 55%, rgba(194, 65, 12, 0));
+  animation: mo-halo var(--mo-d) linear both;
+}
+.mo-shadow {
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  top: 94%;
+  height: .32em;
+  background: radial-gradient(closest-side, rgba(0, 0, 0, .55), rgba(0, 0, 0, 0));
+  animation: mo-shadow var(--mo-d) linear both;
+}
+
+.mo-kn {
+  margin: calc(var(--mo-size) * .2) 0 0;
+  font-family: "Noto Sans Kannada", "Kannada Sangam MN", "Kannada MN", "Nirmala UI", Tunga, var(--font, sans-serif);
+  font-size: calc(var(--mo-size) * .3);
+  font-weight: 500;
+  line-height: 1.3;
+  letter-spacing: .02em;
+  color: #f7b37a;
+  animation: mo-kn var(--mo-d) linear both;
+}
+.mo-tag {
+  margin: calc(var(--mo-size) * .2) 0 0;
+  padding-left: .22em; /* balances the trailing letter-spacing */
+  font-size: clamp(10.5px, calc(var(--mo-size) * .1), 13px);
+  font-weight: 600;
+  letter-spacing: .22em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: rgba(255, 237, 213, .64);
+  animation: mo-tag var(--mo-d) linear both;
+}
+.mo-tag i + i::before { content: "\00B7"; margin: 0 .8em; color: rgba(251, 146, 60, .85); }
+
+.mo-skip {
+  position: absolute;
+  right: max(18px, env(safe-area-inset-right));
+  bottom: max(16px, env(safe-area-inset-bottom));
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 22px;
+  background: none;
+  color: rgba(255, 237, 213, .56);
+  font: 500 13px/1 var(--font, sans-serif);
+  letter-spacing: .04em;
+  cursor: pointer;
+  animation: mo-skip-btn var(--mo-d) linear both;
+}
+.mo-skip:hover { color: rgba(255, 237, 213, .92); }
+
+/* ---------- States ---------- */
+
+/* Hidden tab / prerender: hold the first frame until someone is watching. */
+.mo-intro[data-state="paused"], .mo-intro[data-state="paused"] * { animation-play-state: paused !important; }
+/* Returning visitors: the same film, joined at the moment the logo is lit. */
+.mo-intro[data-mode="brief"], .mo-intro[data-mode="brief"] * { animation-delay: var(--mo-offset) !important; }
+/* Debug still (?introAt=ms). */
+.mo-intro[data-freeze], .mo-intro[data-freeze] * {
+  animation-delay: var(--mo-offset) !important;
+  animation-play-state: paused !important;
+}
+
+/* Reduced motion: no camera, steam, light travel or flight; the logo fades in and the overlay fades out.
+   Overrides the site's global reduced-motion rule, which would otherwise make these fades instant. */
+.mo-intro[data-mode="calm"] { animation: mo-life-calm var(--mo-d) linear both !important; }
+.mo-intro[data-mode="calm"] * { animation: none !important; }
+.mo-intro[data-mode="calm"] .mo-logo { animation: mo-calm-in var(--mo-d) linear both !important; }
+.mo-intro[data-mode="calm"] :is(.mo-atmos, .mo-wisps, .mo-beam, .mo-flood, .mo-dawn) { display: none; }
+.mo-intro[data-mode="calm"] .mo-light { opacity: 1; }
+
+/* Skipped before the logo settled: dissolve. The logo leaves first and fast, so a
+   half-finished logo is never left sitting on top of the page underneath.
+   (Skipped after the settle, the controller instead plays the real ending at speed.)
+   Must come after the mode rules. */
+.mo-intro[data-skip="fade"] { animation: mo-skip-out .38s cubic-bezier(.4, 0, .2, 1) both !important; }
+.mo-intro[data-skip="fade"] .mo-logo { animation: mo-skip-logo .16s linear both !important; }
+
+/* ---------- Hand-off to the website ---------- */
+
+/* The header logo is replaced by the flying logo until it lands on it — including
+   through an accelerated skip, so the brand is never visible in two places at once. */
+.mo-intro:is([data-mode="full"], [data-mode="brief"]):is([data-state="play"], [data-state="paused"]):not([data-nofly]) ~ .nav [data-brand-mark],
+.mo-intro[data-skip="land"]:not([data-nofly]) ~ .nav [data-brand-mark] { opacity: 0; }
+/* Dissolving instead: the film's logo goes first, then the header's fades up. */
+.mo-intro[data-skip="fade"] ~ .nav [data-brand-mark] { animation: mo-brand-in .34s .16s linear both; }
+/* The hero photo's own settle animation waits for the film, so the site arrives in motion. */
+.mo-intro:is([data-state="play"], [data-state="paused"]) ~ main .hero-media img { animation-play-state: paused; }
+/* Overscroll and safe areas stay dark while the film plays. */
+html:has(> body > .mo-intro:is([data-state="play"], [data-state="paused"])) { background: #0c0806; }
+@media print { .mo-intro { display: none !important; } }
+
+/* Without a measured landing spot the wordmark stays centred and fades with the scene. */
+.mo-intro[data-nofly] :is(.mo-fly, .mo-fly-y) { animation: none; }
+.mo-intro[data-nofly] .mo-logo { animation: mo-scene-out var(--mo-d) linear both; }
+
+/* ---------- Mobile cut ---------- */
+/* Keep in sync with INTRO.mobileQuery in config.ts. */
+@media (max-width: 640px), (pointer: coarse) and (max-height: 540px) {
+  /* Fewer, deeper slices: the wall has to read at a third of the desktop size. */
+  .mo-intro { --mo-depth: .034em; }
+  .mo-slice:nth-child(-n + 4) { display: none; }
+  .mo-rim { color: rgba(255, 222, 186, .3); }
+  .mo-stage { perspective: 720px; }
+  .mo-camera { animation-name: mo-cam-m; }
+  .mo-dolly { animation-name: mo-dolly-m; }
+  .mo-turn { animation-name: mo-turn-m; }
+  .mo-lens { animation-name: mo-lens-m; }
+  .mo-kn { font-size: calc(var(--mo-size) * .36); animation-name: mo-kn-m; }
+  .mo-tag { letter-spacing: .16em; padding-left: .16em; }
+  .mo-beam { width: 76vw; margin-left: -38vw; }
+  .mo-grain { animation: mo-grain-out var(--mo-d) linear both; }
+  .mo-skip { right: 50%; transform: translateX(50%); }
+}
+
+/* ---------- Timeline ---------- */
+
+@keyframes mo-life { from, to { visibility: visible; } }
+@keyframes mo-life-calm {
+  0%, 76% { opacity: 1; animation-timing-function: cubic-bezier(.4, 0, .2, 1); }
+  100% { opacity: 0; }
+}
+@keyframes mo-calm-in {
+  0%, 6% { opacity: 0; animation-timing-function: cubic-bezier(.3, 0, .2, 1); }
+  34%, 100% { opacity: 1; }
+}
+@keyframes mo-skip-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes mo-skip-logo { from { opacity: 1; } to { opacity: 0; } }
+@keyframes mo-brand-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes mo-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes mo-scene-out {
+  0%, 88% { opacity: 1; animation-timing-function: cubic-bezier(.35, 0, .25, 1); }
+  100% { opacity: 0; }
+}
+/* Starts transparent so rasterising the noise never lands in the first paint. */
+@keyframes mo-grain-out {
+  0% { opacity: 0; animation-timing-function: linear; }
+  4%, 84% { opacity: .07; animation-timing-function: cubic-bezier(.4, 0, .2, 1); }
+  94%, 100% { opacity: 0; }
+}
+@keyframes mo-light {
+  0%, 1% { opacity: 0; animation-timing-function: cubic-bezier(.35, .06, .3, 1); }
+  33%, 100% { opacity: 1; }
+}
+@keyframes mo-cam {
+  0% { transform: translate3d(0, 2.4%, 0) scale(1.16); animation-timing-function: cubic-bezier(.28, .12, .2, 1); }
+  62% { transform: translate3d(0, 0, 0) scale(1); }
+  77% { transform: translate3d(0, 0, 0) scale(1); animation-timing-function: cubic-bezier(.5, 0, .7, .4); }
+  100% { transform: translate3d(0, -1.2%, 0) scale(1.06); }
+}
+@keyframes mo-beam {
+  0%, 15% { opacity: 0; transform: translate3d(-92vw, 0, 0) rotate(14deg); animation-timing-function: cubic-bezier(.42, .1, .45, 1); }
+  23%, 40% { opacity: 1; }
+  49%, 100% { opacity: 0; transform: translate3d(92vw, 0, 0) rotate(14deg); }
+}
+@keyframes mo-flood {
+  0%, 76% { opacity: 0; transform: translate3d(0, 14%, 0) scale(.8); animation-timing-function: cubic-bezier(.5, 0, .72, .35); }
+  85% { opacity: 1; }
+  95%, 100% { opacity: 1; transform: translate3d(0, 0, 0) scale(2.4); }
+}
+@keyframes mo-dawn {
+  0%, 84% { opacity: 0; animation-timing-function: cubic-bezier(.45, 0, .55, 1); }
+  93%, 100% { opacity: .94; }
+}
+@keyframes mo-wisp-a {
+  0%, 11% { opacity: 0; transform: translate3d(0, 16vmin, 0) scale(.55, .7) rotate(-3deg); animation-timing-function: cubic-bezier(.3, .2, .4, 1); }
+  42% { opacity: 1; }
+  76% { opacity: .85; }
+  90%, 100% { opacity: 0; transform: translate3d(3vmin, -30vmin, 0) scale(1.35, 1.2) rotate(7deg); }
+}
+@keyframes mo-wisp-b {
+  0%, 16% { opacity: 0; transform: translate3d(2vmin, 14vmin, 0) scale(.6, .7) rotate(4deg); animation-timing-function: cubic-bezier(.3, .2, .4, 1); }
+  46% { opacity: .9; }
+  76% { opacity: .7; }
+  90%, 100% { opacity: 0; transform: translate3d(-6vmin, -26vmin, 0) scale(1.3, 1.25) rotate(-9deg); }
+}
+@keyframes mo-wisp-c {
+  0%, 21% { opacity: 0; transform: translate3d(-2vmin, 18vmin, 0) scale(.5, .65) rotate(-2deg); animation-timing-function: cubic-bezier(.3, .2, .4, 1); }
+  52% { opacity: .8; }
+  76% { opacity: .6; }
+  90%, 100% { opacity: 0; transform: translate3d(7vmin, -24vmin, 0) scale(1.25, 1.2) rotate(10deg); }
+}
+@keyframes mo-grain {
+  0% { transform: translate3d(0, 0, 0); }
+  20% { transform: translate3d(-3%, 2%, 0); }
+  40% { transform: translate3d(2%, -4%, 0); }
+  60% { transform: translate3d(-4%, -1%, 0); }
+  80% { transform: translate3d(3%, 3%, 0); }
+}
+
+/* Wordmark: moves out of the dark towards its resting place while the camera pulls back.
+   The approach decelerates smoothly; the turn overshoots by a degree and settles. */
+@keyframes mo-dolly {
+  0%, 12% { transform: translateZ(300px); animation-timing-function: cubic-bezier(.12, .7, .18, 1); }
+  62%, 100% { transform: translateZ(0px); }
+}
+@keyframes mo-turn {
+  0%, 12% { transform: rotateX(26deg) rotateY(-17deg) scaleZ(1); animation-timing-function: cubic-bezier(.2, .62, .25, 1); }
+  58% { transform: rotateX(11.5deg) rotateY(1.4deg) scaleZ(1); animation-timing-function: cubic-bezier(.45, 0, .4, 1); }
+  70%, 78% { transform: rotateX(13deg) rotateY(0deg) scaleZ(1); animation-timing-function: cubic-bezier(.5, 0, .3, 1); }
+  88%, 100% { transform: rotateX(0deg) rotateY(0deg) scaleZ(.02); }
+}
+
+/* Mark: arrives a beat after the wordmark starts moving, and is complete before the hold. */
+@keyframes mo-mark {
+  0%, 13% { opacity: 0; animation-timing-function: cubic-bezier(.3, 0, .3, 1); }
+  30%, 100% { opacity: 1; }
+}
+@keyframes mo-mark-lit {
+  0%, 80% { opacity: 1; animation-timing-function: cubic-bezier(.5, 0, .7, 1); }
+  88%, 100% { opacity: 0; }
+}
+@keyframes mo-mark-ink {
+  0%, 76% { opacity: 0; animation-timing-function: cubic-bezier(.3, 0, .4, 1); }
+  85%, 100% { opacity: 1; }
+}
+@keyframes mo-mark-roof {
+  0%, 14% { opacity: 0; transform: translateY(-42%) scale(.94); animation-timing-function: cubic-bezier(.18, .74, .24, 1); }
+  36% { opacity: 1; transform: translateY(0) scale(1); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes mo-mark-bowl {
+  0%, 20% { opacity: 0; transform: translateY(46%); animation-timing-function: cubic-bezier(.18, .74, .24, 1); }
+  42%, 100% { opacity: 1; transform: translateY(0); }
+}
+@keyframes mo-mark-bowl-2 {
+  0%, 23% { opacity: 0; transform: translateY(52%) scaleY(.7); animation-timing-function: cubic-bezier(.18, .74, .24, 1); }
+  45%, 100% { opacity: 1; transform: translateY(0) scaleY(1); }
+}
+/* Once drawn, the steam keeps drifting — the same idle life the header logo has. */
+@keyframes mo-mark-steam {
+  0%, 34% { opacity: 0; transform: translateY(58%) scaleY(.45); animation-timing-function: cubic-bezier(.2, .7, .2, 1); }
+  50% { opacity: 1; transform: translateY(0) scaleY(1); animation-timing-function: ease-in-out; }
+  66% { opacity: .82; transform: translateY(-9%) scaleY(1.08); animation-timing-function: ease-in-out; }
+  82%, 100% { opacity: 1; transform: translateY(0) scaleY(1); }
+}
+@keyframes mo-mark-steam-2 {
+  0%, 38% { opacity: 0; transform: translateY(62%) scaleY(.45); animation-timing-function: cubic-bezier(.2, .7, .2, 1); }
+  54% { opacity: 1; transform: translateY(0) scaleY(1); animation-timing-function: ease-in-out; }
+  72% { opacity: .8; transform: translateY(-11%) scaleY(1.1); animation-timing-function: ease-in-out; }
+  88%, 100% { opacity: 1; transform: translateY(0) scaleY(1); }
+}
+/* Depth of field: out of focus while close to the lens, sharp as it settles. */
+@keyframes mo-lens {
+  0%, 12% { opacity: 0; filter: blur(18px); animation-timing-function: cubic-bezier(.3, .1, .3, 1); }
+  30% { opacity: 1; }
+  54%, 100% { opacity: 1; filter: none; }
+}
+/* Clay body first, then the glaze catches the light. On the way out the ink is solid
+   before the glaze goes, so the mark never dims on its way to the header. */
+@keyframes mo-face {
+  0%, 19% { opacity: 0; animation-timing-function: cubic-bezier(.35, 0, .25, 1); }
+  46%, 84% { opacity: 1; animation-timing-function: cubic-bezier(.5, 0, .7, 1); }
+  90%, 100% { opacity: 0; }
+}
+@keyframes mo-ink {
+  0%, 77% { opacity: 0; animation-timing-function: cubic-bezier(.3, 0, .4, 1); }
+  85%, 100% { opacity: 1; }
+}
+@keyframes mo-sheen {
+  0%, 44% { opacity: 0; background-position: 100% 0; animation-timing-function: cubic-bezier(.45, .05, .35, 1); }
+  47%, 61% { opacity: 1; }
+  65%, 100% { opacity: 0; background-position: 0% 0; }
+}
+@keyframes mo-slice {
+  0%, 79% { opacity: 1; }
+  87%, 100% { opacity: 0; }
+}
+@keyframes mo-halo {
+  0%, 24% { opacity: 0; transform: scale(.72); animation-timing-function: cubic-bezier(.3, .1, .25, 1); }
+  56% { opacity: .9; transform: scale(1); animation-timing-function: cubic-bezier(.45, 0, .55, 1); }
+  71% { opacity: 1; transform: scale(1.06); animation-timing-function: cubic-bezier(.45, 0, .55, 1); }
+  77% { opacity: .95; transform: scale(1.04); }
+  85%, 100% { opacity: 0; transform: scale(1.12); }
+}
+@keyframes mo-shadow {
+  0%, 32% { opacity: 0; transform: scaleX(.6); animation-timing-function: cubic-bezier(.3, .1, .25, 1); }
+  60%, 77% { opacity: 1; transform: scaleX(1); }
+  84%, 100% { opacity: 0; transform: scaleX(1); }
+}
+@keyframes mo-kn {
+  0%, 47% { opacity: 0; transform: translate3d(0, .3em, 0); filter: blur(7px); animation-timing-function: cubic-bezier(.2, .7, .2, 1); }
+  64%, 76% { opacity: 1; transform: translate3d(0, 0, 0); filter: none; animation-timing-function: cubic-bezier(.5, 0, .75, 0); }
+  83%, 100% { opacity: 0; transform: translate3d(0, -.15em, 0); filter: none; }
+}
+@keyframes mo-tag {
+  0%, 54% { opacity: 0; transform: translate3d(0, .6em, 0); animation-timing-function: cubic-bezier(.2, .7, .2, 1); }
+  70%, 76% { opacity: 1; transform: translate3d(0, 0, 0); animation-timing-function: cubic-bezier(.5, 0, .75, 0); }
+  82%, 100% { opacity: 0; transform: translate3d(0, -.3em, 0); }
+}
+@keyframes mo-skip-btn {
+  0%, 10% { opacity: 0; }
+  16%, 72% { opacity: 1; }
+  77%, 100% { opacity: 0; }
+}
+/* Flight into the header: X and Y use different curves, so the path arcs up and over. */
+@keyframes mo-fly-x {
+  0%, 78% { transform: translate3d(0, 0, 0); animation-timing-function: cubic-bezier(.62, 0, .28, 1); }
+  96%, 100% { transform: translate3d(var(--mo-fx), 0, 0); }
+}
+@keyframes mo-fly-y {
+  0%, 78% { transform: translate3d(0, 0, 0) scale(1); animation-timing-function: cubic-bezier(.42, 0, .22, 1); }
+  96%, 100% { transform: translate3d(0, var(--mo-fy), 0) scale(var(--mo-fs)); }
+}
+
+/* Mobile keyframes: shallower camera and approach, no blur filters. */
+@keyframes mo-cam-m {
+  0% { transform: translate3d(0, 1.6%, 0) scale(1.09); animation-timing-function: cubic-bezier(.28, .12, .2, 1); }
+  60%, 77% { transform: translate3d(0, 0, 0) scale(1); animation-timing-function: cubic-bezier(.5, 0, .7, .4); }
+  100% { transform: translate3d(0, -.8%, 0) scale(1.04); }
+}
+@keyframes mo-dolly-m {
+  0%, 12% { transform: translateZ(170px); animation-timing-function: cubic-bezier(.12, .7, .18, 1); }
+  62%, 100% { transform: translateZ(0px); }
+}
+@keyframes mo-turn-m {
+  0%, 12% { transform: rotateX(19deg) rotateY(-11deg) scaleZ(1); animation-timing-function: cubic-bezier(.2, .62, .25, 1); }
+  58% { transform: rotateX(11.5deg) rotateY(.9deg) scaleZ(1); animation-timing-function: cubic-bezier(.45, 0, .4, 1); }
+  70%, 78% { transform: rotateX(13deg) rotateY(0deg) scaleZ(1); animation-timing-function: cubic-bezier(.5, 0, .3, 1); }
+  88%, 100% { transform: rotateX(0deg) rotateY(0deg) scaleZ(.02); }
+}
+@keyframes mo-lens-m {
+  0%, 12% { opacity: 0; animation-timing-function: cubic-bezier(.3, .1, .3, 1); }
+  34%, 100% { opacity: 1; }
+}
+@keyframes mo-kn-m {
+  0%, 47% { opacity: 0; transform: translate3d(0, .3em, 0); animation-timing-function: cubic-bezier(.2, .7, .2, 1); }
+  64%, 76% { opacity: 1; transform: translate3d(0, 0, 0); animation-timing-function: cubic-bezier(.5, 0, .75, 0); }
+  83%, 100% { opacity: 0; transform: translate3d(0, -.15em, 0); }
+}

@@ -1,0 +1,124 @@
+/* MAANE OOTA design tokens — master plan section 10.
+   Colours tested for text/background contrast (deep green / charcoal on cream
+   both exceed WCAG AA for body text). */
+:root {
+  --green: #1F5138;
+  --green-ink: #143726;
+  --cream: #FFF8EF;
+  --charcoal: #242424;
+  --terracotta: #A74124;
+  --muted: #5c5c5c;
+  --line: #e6ddce;
+  --white: #ffffff;
+  --ok: #1F5138;
+  --warn: #A74124;
+  --radius: 12px;
+  --maxw: 1100px;
+}
+
+* { box-sizing: border-box; }
+html, body { padding: 0; margin: 0; }
+body {
+  background: var(--cream);
+  color: var(--charcoal);
+  font-family: "Noto Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+}
+a { color: var(--green); }
+h1, h2, h3 { color: var(--green-ink); line-height: 1.2; }
+h1 { font-size: 1.9rem; margin: 0 0 .5rem; }
+h2 { font-size: 1.35rem; margin: 1.5rem 0 .75rem; }
+
+.container { max-width: var(--maxw); margin: 0 auto; padding: 0 16px; }
+
+.sandbox-banner {
+  background: var(--terracotta); color: #fff; text-align: center;
+  padding: 6px 12px; font-size: .85rem; font-weight: 600;
+}
+
+header.site {
+  background: var(--white); border-bottom: 1px solid var(--line);
+  position: sticky; top: 0; z-index: 20;
+}
+header.site .bar { display: flex; align-items: center; gap: 20px; height: 60px; }
+.brand { font-weight: 800; font-size: 1.25rem; color: var(--green); text-decoration: none; }
+nav.main { display: flex; gap: 18px; flex-wrap: wrap; }
+nav.main a { text-decoration: none; color: var(--charcoal); font-weight: 500; }
+nav.main a:hover { color: var(--green); }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: 44px; padding: 0 20px; border-radius: var(--radius);
+  background: var(--green); color: #fff; border: none; font-weight: 600;
+  text-decoration: none; cursor: pointer; font-size: 1rem;
+}
+.btn:hover { background: var(--green-ink); }
+.btn.secondary { background: var(--white); color: var(--green); border: 2px solid var(--green); }
+.btn:focus-visible { outline: 3px solid var(--terracotta); outline-offset: 2px; }
+
+.hero {
+  background: linear-gradient(180deg, #fff 0%, var(--cream) 100%);
+  padding: 48px 0;
+}
+.hero h1 { font-size: 2.4rem; }
+.hero p.lead { font-size: 1.15rem; color: var(--muted); max-width: 640px; }
+.cta-row { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 20px; }
+
+.locator { margin-top: 24px; display: flex; gap: 8px; flex-wrap: wrap; }
+.locator input {
+  flex: 1; min-width: 240px; min-height: 44px; padding: 0 14px;
+  border: 2px solid var(--line); border-radius: var(--radius); font-size: 1rem;
+}
+.locator input:focus-visible { outline: 3px solid var(--green); }
+
+/* Form controls use the page font (16px avoids iOS zoom) and never overflow narrow screens. */
+input, select, textarea, button { font: inherit; }
+input, select, textarea { max-width: 100%; }
+
+.grid { display: grid; gap: 16px; }
+.grid.cards { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+
+.card {
+  background: var(--white); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 16px;
+}
+.card h3 { margin: 0 0 6px; font-size: 1.05rem; }
+.price { font-weight: 700; color: var(--green-ink); }
+.tag {
+  display: inline-block; font-size: .72rem; padding: 2px 8px; border-radius: 999px;
+  background: #eef3ef; color: var(--green-ink); margin-right: 6px;
+}
+.tag.warn { background: #f7e7e0; color: var(--terracotta); }
+
+.state-badge { font-weight: 600; }
+.state-available { color: var(--ok); }
+.state-later, .state-bulk_only, .state-paused, .state-location_unclear { color: var(--terracotta); }
+.state-not_served { color: var(--muted); }
+
+/* Vertical padding only, so .section can share an element with .container. */
+.section { padding-top: 28px; padding-bottom: 28px; }
+.muted { color: var(--muted); }
+.empty { padding: 24px; text-align: center; color: var(--muted); border: 1px dashed var(--line); border-radius: var(--radius); }
+
+footer.site { border-top: 1px solid var(--line); background: var(--white); padding: 28px 0; margin-top: 40px; }
+footer.site .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px,1fr)); gap: 20px; }
+footer.site a { display: block; color: var(--charcoal); text-decoration: none; padding: 3px 0; font-size: .92rem; }
+
+.breadcrumbs { font-size: .85rem; color: var(--muted); margin: 12px 0; }
+.breadcrumbs a { color: var(--muted); }
+
+table.data { width: 100%; border-collapse: collapse; font-size: .9rem; }
+table.data th, table.data td { text-align: left; padding: 8px; border-bottom: 1px solid var(--line); }
+.check-pass { color: var(--ok); font-weight: 700; }
+.check-fail { color: var(--terracotta); font-weight: 700; }
+
+@media (max-width: 640px) {
+  .hero h1 { font-size: 1.8rem; }
+  header.site .bar { height: auto; flex-wrap: wrap; gap: 4px 16px; padding-top: 8px; padding-bottom: 4px; }
+  nav.main { width: 100%; flex-wrap: nowrap; overflow-x: auto; gap: 16px; }
+  nav.main a { white-space: nowrap; min-height: 44px; display: inline-flex; align-items: center; }
+}
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
