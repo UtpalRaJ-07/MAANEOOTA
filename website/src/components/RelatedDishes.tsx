@@ -10,7 +10,7 @@ export function RelatedDishes({ dish, min = 3 }: { dish: Dish; min?: number }) {
   const picked = [...withImage(sameCuisine), ...withImage(sameDiet)].slice(0, Math.max(min, 3));
   if (picked.length < 2) return null;
   return (
-    <div className="grid" style={{ textAlign: "left" }}>
+    <div className={`grid ${picked.length === 3 ? "three" : ""}`} style={{ textAlign: "left" }}>
       {picked.map((d) => <DishCard key={d.slug} dish={d} />)}
     </div>
   );

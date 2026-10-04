@@ -39,7 +39,7 @@ export function CuisinePage(props: {
           <h2 className="h2 reveal">{props.heading}</h2>
           <p className="sub reveal">{props.sub}</p>
           <DietLegend />
-          <div className="grid" style={{ textAlign: "left" }}>
+          <div className={`grid ${withImage.length === 3 ? "three" : ""}`} style={{ textAlign: "left" }}>
             {withImage.map((d) => <DishCard key={d.slug} dish={d} />)}
           </div>
           {rest.length > 0 && (
